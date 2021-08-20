@@ -101,7 +101,7 @@ _TIFFPrintField(FILE* fd, const TIFFField *fip,
 		else if(fip->field_type == TIFF_FLOAT)
 			fprintf(fd, "%f", ((float *)raw_data)[j]);
 		else if(fip->field_type == TIFF_DOUBLE)
-			fprintf(fd, "%lf", ((double *) raw_data)[j]);
+			fprintf(fd, "%.20lf", ((double *) raw_data)[j]);
 		else if(fip->field_type == TIFF_ASCII) {
 			fprintf(fd, "%s", (char *) raw_data);
 			break;

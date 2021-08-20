@@ -70,6 +70,10 @@ add_executable(tiffcmp)
 target_sources(tiffcmp PRIVATE tiffcmp.c)
 target_link_libraries(tiffcmp PRIVATE tiff port)
 
+add_executable(my_split)
+target_sources(my_split PRIVATE my_split.c)
+target_link_libraries(my_split PRIVATE tiff port)
+
 add_executable(tiffcp)
 target_sources(tiffcp PRIVATE tiffcp.c)
 target_link_libraries(tiffcp PRIVATE tiff port)
@@ -105,6 +109,7 @@ target_link_libraries(tiffsplit PRIVATE tiff port)
 # rgb2ycbcr and thumbnail are intended to *NOT* be installed. They are for
 # testing purposes only.
 install(TARGETS fax2ps
+                my_split
                 fax2tiff
                 pal2rgb
                 ppm2tiff
