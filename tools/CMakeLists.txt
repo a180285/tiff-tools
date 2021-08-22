@@ -70,9 +70,25 @@ add_executable(tiffcmp)
 target_sources(tiffcmp PRIVATE tiffcmp.c)
 target_link_libraries(tiffcmp PRIVATE tiff port)
 
-add_executable(my_split)
+add_executable(my_split my_commons.h my_commons.c my_commons.h)
 target_sources(my_split PRIVATE my_split.c)
 target_link_libraries(my_split PRIVATE tiff port)
+
+add_executable(my_tiff_cp my_commons.h my_commons.c my_commons.h)
+target_sources(my_tiff_cp PRIVATE my_tiff_cp.c)
+target_link_libraries(my_tiff_cp PRIVATE tiff port)
+
+add_executable(my_mask my_commons.h my_commons.c my_commons.h)
+target_sources(my_mask PRIVATE my_mask.c)
+target_link_libraries(my_mask PRIVATE tiff port)
+
+add_executable(my_merge my_commons.h my_commons.c my_commons.h)
+target_sources(my_merge PRIVATE my_merge.c)
+target_link_libraries(my_merge PRIVATE tiff port CMath::CMath)
+
+add_executable(my_tiff_set my_commons.h my_commons.c my_commons.h)
+target_sources(my_tiff_set PRIVATE my_tiff_set.c)
+target_link_libraries(my_tiff_set PRIVATE tiff port CMath::CMath)
 
 add_executable(tiffcp)
 target_sources(tiffcp PRIVATE tiffcp.c)
@@ -110,6 +126,9 @@ target_link_libraries(tiffsplit PRIVATE tiff port)
 # testing purposes only.
 install(TARGETS fax2ps
                 my_split
+                my_tiff_cp
+                my_mask
+        my_merge
                 fax2tiff
                 pal2rgb
                 ppm2tiff
@@ -145,6 +164,9 @@ if(WEBP_SUPPORT AND EMSCRIPTEN)
   foreach(target fax2ps
                  fax2tiff
                  pal2rgb
+          my_tiff_cp
+          my_mask
+          my_merge
                  ppm2tiff
                  raw2tiff
                  rgb2ycbcr

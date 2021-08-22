@@ -3701,9 +3701,9 @@ TIFFReadDirectory(TIFF* tif)
 			TIFFReadDirectoryFindFieldInfo(tif,dp->tdir_tag,&fii);
 			if (fii == FAILED_FII)
 			{
-				TIFFWarningExt(tif->tif_clientdata, module,
-				    "Unknown field with tag %"PRIu16" (0x%"PRIx16") encountered",
-				    dp->tdir_tag,dp->tdir_tag);
+//				TIFFWarningExt(tif->tif_clientdata, module,
+//				    "Unknown field with tag %"PRIu16" (0x%"PRIx16") encountered",
+//				    dp->tdir_tag,dp->tdir_tag);
 				/* the following knowingly leaks the 
 				   anonymous field structure */
 				if (!_TIFFMergeFields(tif,

@@ -1024,26 +1024,7 @@ tiffcp(TIFF* in, TIFF* out)
             TIFFWarning("TIFF copy", "Add tag [%d] to output tiff, status: %d", customValue->info->field_tag, ok);
         }
 
-
-
-
-
-
         out->tif_dir.td_customValueCount = in->tif_dir.td_customValueCount;
-        TIFFTagValue* newCustomValues = _TIFFmalloc(sizeof(TIFFTagValue) * in->tif_dir.td_customValueCount);
-        _TIFFmemcpy(newCustomValues, in->tif_dir.td_customValues,
-                sizeof(TIFFTagValue) * in->tif_dir.td_customValueCount);
-
-        for (int i = 0; i < in->tif_dir.td_customValueCount; i++) {
-            TIFFTagValue* customValue = newCustomValues + i;
-            int dataSize = _TIFFDataSize(customValue->info->field_type);\
-            tmsize_t bytesCount = dataSize * customValue->count;
-            void* newValue = _TIFFmalloc(bytesCount);
-            _TIFFmemcpy(newValue, customValue->value, bytesCount);
-            customValue->value = newValue;
-        }
-
-        out->tif_dir.td_customValues = newCustomValues;
     }
 
 	cf = pickCopyFunc(in, out, bitspersample, samplesperpixel);
