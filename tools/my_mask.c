@@ -695,14 +695,53 @@ static const struct cpTag {
 
 /* PODD */
 
-struct my_tiff_info {
+struct _my_tiff_info {
     TIFF* tif;
+    double scale;
     int32_t rowOffset;
     int32_t colOffset;
 };
 
+typedef struct _my_tiff_info my_tiff_info;
+
+TIFFTagValue* getTag(TIFF* tiff, int tag) {
+    for (int i = 0; i < tiff->tif_dir.td_customValueCount; i++) {
+        TIFFTagValue* value = tiff->tif_dir.td_customValues + i;
+        if (value->info->field_tag == tag) {
+            return value;
+        }
+    }
+    TIFFWarning(TIFFFileName(tiff), "cannot find tag: %d", tag);
+    exit(-9);
+    return NULL;
+}
+
+my_tiff_info* gen_my_tiff_info(TIFF* tiff) {
+    my_tiff_info* tiff_info = _TIFFmalloc(sizeof (my_tiff_info));
+    tiff_info->tif = tiff;
+    TIFFTagValue* scaleTag = getTag(tiff, 33550);
+    double scale = ((double*)scaleTag->value)[0];
+    TIFFTagValue* cord = getTag(tiff, 33922); // -180, 90
+    double* cords = ((double*)cord->value) + 3;
+    int rowOffset = round(90.0 / scale - cords[1] / scale);
+    TIFFWarning(TIFFFileName(tiff), "get row offset, %d", rowOffset);
+    if ((rowOffset & 255) != 0) {
+        exit(-9);
+    }
+    int colOffset = round(cords[0] / scale - 180 / scale);
+    TIFFWarning(TIFFFileName(tiff), "get col offset, %d", colOffset);
+    if ((rowOffset & 255) != 0) {
+        exit(-9);
+    }
+
+    tiff_info->rowOffset = rowOffset;
+    tiff_info->colOffset = colOffset;
+    tiff_info->scale = scale;
+    return tiff_info;
+}
+
 void genMaskFromImage(
-        TIFF* imageIn,
+        my_tiff_info* image_info,
         uint32_t row,
         uint32_t rowEnd,
         uint32_t col,
@@ -710,8 +749,9 @@ void genMaskFromImage(
         uint32_t imageScaleFromDem,
         uint8_t* maskBuf)
 {
-    if (imageIn->tif_dir.td_sampleformat != SAMPLEFORMAT_UINT) {
-        TIFFWarning(TIFFFileName(imageIn), "Only support uint images");
+    TIFF* imageIn = image_info->tif;
+    if (image_info->tif->tif_dir.td_sampleformat != SAMPLEFORMAT_UINT) {
+        TIFFWarning(TIFFFileName(image_info->tif), "Only support uint images");
         exit(-4);
     }
     int maskCols = colEnd - col;
@@ -722,6 +762,11 @@ void genMaskFromImage(
     rowEnd *= imageScaleFromDem;
     colEnd *= imageScaleFromDem;
 
+    row -= image_info->rowOffset;
+    rowEnd -= image_info->rowOffset;
+    col -= image_info->colOffset;
+    colEnd -= image_info->colOffset;
+
     uint32_t rowStart = row;
     uint32_t colStart = col;
 
@@ -731,18 +776,25 @@ void genMaskFromImage(
     tmsize_t tile_width = imageIn->tif_dir.td_tilewidth;
     for (; row < rowEnd; row += tile_length) {
         for (col = colStart; col < colEnd; col += tile_width) {
-            if (TIFFReadTile(imageIn, tileBuf, col, row, 0, 0) < 0) {
-                TIFFError(TIFFFileName(imageIn),
-                          "Error, can't read tile at %"PRIu32" %"PRIu32,
-                          col, row);
-                exit(-1);
-            }
             int allZero = 1;
-            for (int i = 0; i < tile_width * tile_length * 3; i++) {
-                if (tileBuf[i] > 10) {
-                    allZero = 0;
+
+            if (row >= 0 && row < imageIn->tif_dir.td_imagelength
+                && col >= 0 && col < imageIn->tif_dir.td_imagewidth) {
+                if (TIFFReadTile(imageIn, tileBuf, col, row, 0, 0) < 0) {
+                    TIFFError(TIFFFileName(imageIn),
+                              "Error, can't read tile at %"PRIu32" %"PRIu32,
+                              col, row);
+                    exit(-1);
                 }
+                for (int i = 0; i < tile_width * tile_length * 3; i++) {
+                    if (tileBuf[i] > 10) {
+                        allZero = 0;
+                    }
+                }
+            } else {
+                TIFFWarning(TIFFFileName(imageIn), "No data read.");
             }
+
             if (!allZero) {
                 continue;
             }
@@ -792,12 +844,16 @@ int maskDem(TIFF* demIn, TIFF* imageIn, TIFF* out) {
         TIFFWarning("tiff cp", "input tiff is not full tiled.");
         exit(-1);
     }
-    uint32_t imageScaleFromDem = imageIn->tif_dir.td_imagelength / demLength;
+
+    my_tiff_info* image_info = gen_my_tiff_info(imageIn);
+    my_tiff_info* dem_info = gen_my_tiff_info(demIn);
+
+
+    uint32_t imageScaleFromDem = round(dem_info->scale / image_info->scale);
     TIFFWarning("", "imageScaleFromDem: %u", imageScaleFromDem);
     TIFFWarning("", "Input image tile %d x %d", imageIn->tif_dir.td_tilelength, imageIn->tif_dir.td_tilewidth);
     TIFFWarning("", "Input dem tile %d x %d", demIn->tif_dir.td_tilelength, demIn->tif_dir.td_tilewidth);
 
-    my_tiff_info image_info;
 
     float* tileBuf = limitMalloc(tileSize);
     uint8_t* maskBuf = limitMalloc(tileSize);
@@ -817,7 +873,12 @@ int maskDem(TIFF* demIn, TIFF* imageIn, TIFF* out) {
                 exit(-1);
             }
 
-            genMaskFromImage(imageIn, row, row + tilelength, col, col + tilewidth, imageScaleFromDem, maskBuf);
+            genMaskFromImage(image_info,
+                             dem_info->rowOffset + row,
+                             dem_info->rowOffset + row + tilelength,
+                             dem_info->colOffset + col,
+                             dem_info->colOffset + col + tilewidth,
+                             imageScaleFromDem, maskBuf);
 
             int zeroCount = 0;
             for (int i = 0; i < tilelength * tilewidth; i++) {

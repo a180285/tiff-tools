@@ -80,7 +80,7 @@ target_link_libraries(my_tiff_cp PRIVATE tiff port)
 
 add_executable(my_mask my_commons.h my_commons.c my_commons.h)
 target_sources(my_mask PRIVATE my_mask.c)
-target_link_libraries(my_mask PRIVATE tiff port)
+target_link_libraries(my_mask PRIVATE tiff port CMath::CMath)
 
 add_executable(my_merge my_commons.h my_commons.c my_commons.h)
 target_sources(my_merge PRIVATE my_merge.c)
@@ -127,7 +127,7 @@ target_link_libraries(tiffsplit PRIVATE tiff port)
 install(TARGETS fax2ps
                 my_split
                 my_tiff_cp
-                my_mask
+        my_mask
         my_merge
                 fax2tiff
                 pal2rgb
