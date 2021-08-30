@@ -693,7 +693,13 @@ static const struct cpTag {
         (TIFF* in, TIFF* out, uint32_t l, uint32_t w, uint16_t samplesperpixel);
         static	copyFunc pickCopyFunc(TIFF*, TIFF*, uint16_t, uint16_t);
 
-        /* PODD */
+/* PODD */
+
+struct my_tiff_info {
+    TIFF* tif;
+    int32_t rowOffset;
+    int32_t colOffset;
+};
 
 void genMaskFromImage(
         TIFF* imageIn,
@@ -709,7 +715,7 @@ void genMaskFromImage(
         exit(-4);
     }
     int maskCols = colEnd - col;
-    memset(maskBuf, imageScaleFromDem * imageScaleFromDem / 4, (colEnd - col) * (rowEnd - row));
+    memset(maskBuf, 1, (colEnd - col) * (rowEnd - row));
 
     row *= imageScaleFromDem;
     col *= imageScaleFromDem;
@@ -721,10 +727,10 @@ void genMaskFromImage(
 
     uint8_t* tileBuf = limitMalloc(TIFFTileSize(imageIn));
 
-    tmsize_t tileLength = imageIn->tif_dir.td_tilelength;
-    tmsize_t tileWidth = imageIn->tif_dir.td_tilewidth;
-    for (; row < rowEnd; row += tileLength) {
-        for (col = colStart; col < colEnd; col += tilewidth) {
+    tmsize_t tile_length = imageIn->tif_dir.td_tilelength;
+    tmsize_t tile_width = imageIn->tif_dir.td_tilewidth;
+    for (; row < rowEnd; row += tile_length) {
+        for (col = colStart; col < colEnd; col += tile_width) {
             if (TIFFReadTile(imageIn, tileBuf, col, row, 0, 0) < 0) {
                 TIFFError(TIFFFileName(imageIn),
                           "Error, can't read tile at %"PRIu32" %"PRIu32,
@@ -732,7 +738,7 @@ void genMaskFromImage(
                 exit(-1);
             }
             int allZero = 1;
-            for (int i = 0; i < tileLength * tileWidth * 3; i++) {
+            for (int i = 0; i < tile_width * tile_length * 3; i++) {
                 if (tileBuf[i] > 10) {
                     allZero = 0;
                 }
@@ -741,8 +747,8 @@ void genMaskFromImage(
                 continue;
             }
 
-            for (int i = 0; i < tileLength; i++) {
-                for (int j = 0; j < tileWidth; j++) {
+            for (int i = 0; i < tile_length; i += imageScaleFromDem) {
+                for (int j = 0; j < tile_width; j += imageScaleFromDem) {
                     int x = ((row + i) - rowStart) / imageScaleFromDem;
                     int y = ((col + j) - colStart) / imageScaleFromDem;
                     maskBuf[x * maskCols + y] = 0;
@@ -778,21 +784,26 @@ int maskDem(TIFF* demIn, TIFF* imageIn, TIFF* out) {
         exit(-1);
     }
 
-    tmsize_t tileLength = demIn->tif_dir.td_tilelength;
-    tmsize_t tileWidth = demIn->tif_dir.td_tilewidth;
+    tilelength = demIn->tif_dir.td_tilelength;
+    tilewidth = demIn->tif_dir.td_tilewidth;
     tmsize_t tileSize = TIFFTileSize(demIn);
-    long tileCount = (demLength / tilelength) * (demWidth / tileWidth);
+    long tileCount = (demLength / tilelength) * (demWidth / tilewidth);
     if (demLength % tilelength != 0 || demWidth % tilewidth != 0) {
         TIFFWarning("tiff cp", "input tiff is not full tiled.");
         exit(-1);
     }
     uint32_t imageScaleFromDem = imageIn->tif_dir.td_imagelength / demLength;
-    TIFFWarning("", "imageScaleFromDem: %u\n", imageScaleFromDem);
+    TIFFWarning("", "imageScaleFromDem: %u", imageScaleFromDem);
+    TIFFWarning("", "Input image tile %d x %d", imageIn->tif_dir.td_tilelength, imageIn->tif_dir.td_tilewidth);
+    TIFFWarning("", "Input dem tile %d x %d", demIn->tif_dir.td_tilelength, demIn->tif_dir.td_tilewidth);
+
+    my_tiff_info image_info;
+
     float* tileBuf = limitMalloc(tileSize);
     uint8_t* maskBuf = limitMalloc(tileSize);
     long tileIdx = 0;
     int progress = 0;
-    for (uint32_t row = 0; row < demLength; row += tileLength) {
+    for (uint32_t row = 0; row < demLength; row += tilelength) {
         for (uint32_t col = 0; col < demWidth; col += tilewidth) {
             tileIdx++;
             if (tileIdx * 100 / tileCount > progress) {
@@ -816,7 +827,7 @@ int maskDem(TIFF* demIn, TIFF* imageIn, TIFF* out) {
                 }
             }
             if (zeroCount > 0 && row != col) {
-                TIFFWarning("", "row: %u, col: %u, nodata count: %d", row, col, zeroCount);
+                TIFFWarning("", "row: %u, col: %u, nodata count: %d / %d", row, col, zeroCount, tilewidth * tilelength);
             }
 
             if (TIFFWriteTile(out, tileBuf, col, row, 0, 0) < 0) {

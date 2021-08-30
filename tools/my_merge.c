@@ -194,7 +194,7 @@ DECLAREreadFunc(readContigTilesIntoBuffer);
 
 int mergeTiff(const char* merge_folder, TIFF* output_tif) {
     char* input_file_path = _TIFFmalloc(1024);
-    combine_path(merge_folder, "0-0.tiff", input_file_path);
+    combine_path(merge_folder, "0/0-0.tiff", input_file_path);
 
     TIFF* input_tif = TIFFOpen(input_file_path, "r");
     if (input_tif == NULL) {
@@ -228,15 +228,24 @@ int mergeTiff(const char* merge_folder, TIFF* output_tif) {
     for (uint32_t row = 0; row < output_tif->tif_dir.td_imagelength; row += output_tif->tif_dir.td_tilelength) {
         for (uint32_t col = 0; col < output_tif->tif_dir.td_imagewidth; col += output_tif->tif_dir.td_tilewidth) {
             process_tile_count++;
-            if (process_tile_count * 100 / total_tiles > progress) {
+            if (process_tile_count * 1000 / total_tiles > progress) {
                 progress++;
-                TIFFWarning("", "Merge progress %d %%, [%d / %d]", progress, process_tile_count, total_tiles);
+                TIFFWarning("", "Merge progress %03d %%, [%d / %d]", progress, process_tile_count, total_tiles);
             }
             int file_y = row / output_tif->tif_dir.td_tilelength;
             int file_x = col / output_tif->tif_dir.td_tilewidth;
-            sprintf(file_prefix, "%d-%d.tiff", file_x, file_y);
+            sprintf(file_prefix, "%d/%d-%d.tiff", file_y, file_x, file_y);
             combine_path(merge_folder, file_prefix, input_file_path);
-            input_tif = TIFFOpen(input_file_path, "r");
+
+            TIFFWarning("merge", "merge file: %s , progress %03d / 1000 ...", input_file_path, progress);
+            do {
+                input_tif = TIFFOpen(input_file_path, "r");
+                if (input_tif != NULL) {
+                    break;
+                }
+                TIFFWarning("", "wait for file: %s", input_file_path);
+                usleep(10 * 1000000);
+            } while (1);
 
             int ok = readContigTilesIntoBuffer(input_tif,
                                       input_buffer,
